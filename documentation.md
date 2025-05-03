@@ -43,7 +43,7 @@ Here’s a suggested sequence of steps for developing the `VibeBackTest` applica
     *   Create a project directory (e.g., `vibebacktest`).
     *   Set up a Python virtual environment (e.g., `python -m venv venv`).
     *   Activate the virtual environment (`source venv/bin/activate` on Linux/macOS or `.\venv\Scripts\activate` on Windows).
-    *   Install necessary libraries: `pip install openbb pyyaml python-dateutil` (We'll use `python-dateutil` for easier month increments). Create a `requirements.txt` file.
+    *   Install necessary libraries: `pip install openbb pyyaml python-dateutil` (We'll use `python-dateutil` for easier month increments). Create a `requirements.txt` file. *(Note: `openbb` installs the Python SDK, which is used for programmatic access within the script).*
 
 2.  **Implement Command-Line Argument Parsing:**
     *   Use the `argparse` module (standard library).
@@ -68,19 +68,209 @@ Here’s a suggested sequence of steps for developing the `VibeBackTest` applica
     *   Decide how to store historical data collected during the backtest (e.g., a list of dictionaries, where each dictionary represents a month's state).
 
 5.  **Implement Core Backtesting Logic (Phase 2):**
+*   This phase heavily utilizes the OpenBB SDK (typically imported as `obb`) for accessing market data. Ensure proper installation and potentially API key configuration for the desired data providers (e.g., FMP, Polygon, yfinance).
     *   Create the main backtesting loop that iterates month by month from the start date to the end date. Use `dateutil.relativedelta.relativedelta(months=1)` for easy increments.
     *   **Inside the loop:**
         *   **a. Screener:**
-            *   Call `openbb` functions (e.g., `openbb.economy.screener` or similar, you'll need to explore the specific `openbb` functions that match your criteria).
-            *   Filter/rank the results based on the `screener` criteria from the YAML.
-            *   Select the top `max_assets` as defined in the `rebalancing` section of the YAML.
+            *   Translate the criteria defined in the `screener` section of the strategy YAML file into parameters for the OpenBB SDK.
+            *   The primary function for this is likely `obb.equity.screener`. You'll need to map the YAML `metric`, `min`, `max`, and `ranking` fields to the corresponding parameters of this function for a chosen provider (e.g., `fmp`, `nasdaq`). Refer to the OpenBB SDK documentation for the exact parameter names and supported metrics for each provider.
+            *   Example using `obb.equity.screener` (conceptual, provider parameters may vary):
+                ```python
+                import openbb as obb
+                import logging
+                import pandas as pd
+
+                # Assume strategy_data is loaded from YAML
+                strategy_data = {
+                    'screener': {
+                        'criteria': [
+                            {'metric': 'MarketCap', 'min': 2000000000, 'max': 200000000000},
+                            {'metric': 'P/E', 'max': 25},
+                            {'metric': 'AverageVolume', 'min': 1000000}
+                        ],
+                        'ranking': {'metric': 'MarketCap', 'order': 'descending'}
+                    },
+                    'rebalancing': {'max_assets': 10}
+                } # Example data
+
+                screener_config = strategy_data.get('screener', {})
+                criteria = screener_config.get('criteria', [])
+                ranking = screener_config.get('ranking', {})
+                max_assets = strategy_data.get('rebalancing', {}).get('max_assets', 10)
+
+                # Example: Mapping YAML criteria to FMP provider parameters (adjust as needed)
+                fmp_params = {
+                    "mktcap_min": next((c.get('min') for c in criteria if c.get('metric') == 'MarketCap'), None),
+                    "mktcap_max": next((c.get('max') for c in criteria if c.get('metric') == 'MarketCap'), None),
+                    "pe_max": next((c.get('max') for c in criteria if c.get('metric') == 'P/E'), None),
+                    "volume_min": next((c.get('min') for c in criteria if c.get('metric') == 'AverageVolume'), None),
+                    "limit": max_assets * 5 # Fetch more initially for potential ranking/filtering
+                    # Add other criteria mappings...
+                }
+                # Remove None values
+                fmp_params = {k: v for k, v in fmp_params.items() if v is not None}
+
+                selected_symbols = []
+                try:
+                    logging.info(f"Running screener with FMP params: {fmp_params}")
+                    # Note: Ranking might need to be applied after fetching if not directly supported by API call
+                    screener_results = obb.equity.screener(provider="fmp", **fmp_params)
+
+                    if screener_results and screener_results.results:
+                         # Convert results to DataFrame if it's not already
+                         if isinstance(screener_results.results, list) and screener_results.results:
+                             # Attempt to create DataFrame from list of Pydantic models or dicts
+                             try:
+                                 df = pd.DataFrame([r.model_dump() if hasattr(r, 'model_dump') else r for r in screener_results.results])
+                             except Exception as df_err:
+                                 logging.error(f"Could not convert screener results to DataFrame: {df_err}")
+                                 df = pd.DataFrame() # Fallback to empty DF
+                         elif isinstance(screener_results.results, pd.DataFrame):
+                             df = screener_results.results
+                         else:
+                             df = pd.DataFrame() # Fallback
+
+                         if not df.empty:
+                             # Apply ranking defined in YAML (e.g., sort by market cap descending)
+                             # Adjust metric name mapping if needed (e.g., YAML 'MarketCap' -> FMP 'marketCap')
+                             rank_metric_yaml = ranking.get('metric', 'MarketCap')
+                             # Simple mapping example (needs refinement based on actual FMP column names)
+                             rank_metric_fmp = next((col for col in df.columns if col.lower() == rank_metric_yaml.lower()), None)
+
+                             rank_order_asc = ranking.get('order', 'descending') != 'descending'
+
+                             if rank_metric_fmp:
+                                  df_ranked = df.sort_values(by=rank_metric_fmp, ascending=rank_order_asc)
+                             else:
+                                  logging.warning(f"Ranking metric '{rank_metric_yaml}' (mapped to '{rank_metric_fmp}') not found in FMP results columns: {df.columns}. Skipping ranking.")
+                                  df_ranked = df
+
+                             # Select top N assets
+                             selected_symbols = df_ranked.head(max_assets)['symbol'].tolist()
+                             logging.info(f"Selected {len(selected_symbols)} symbols after screening and ranking: {selected_symbols}")
+                         else:
+                             logging.warning("Screener returned results but DataFrame conversion failed or was empty.")
+                    else:
+                         logging.warning("Screener did not return any results.")
+
+                except Exception as e:
+                    logging.error(f"Error running screener: {e}")
+                    # selected_symbols remains empty list
+
+                # `selected_symbols` now holds the list of assets for this month
+                ```
+            *   Alternatively, for simpler lookups (like finding a specific ticker based on a query), `obb.equity.search` can be used. See the example `get_stock_suggestions` function provided earlier for usage.
+            *   The goal is to obtain a list of asset symbols (`selected_symbols` in the example) that meet the strategy's criteria for the current month.
         *   **b. Transactions:**
             *   Determine which assets to sell (in portfolio but not in current screener list).
             *   Determine which assets to buy (in screener list but not in portfolio, or needing adjustment based on rebalancing).
             *   Implement the rebalancing logic (e.g., calculate target value per asset based on current portfolio value and `max_assets` for equal weighting).
-            *   Simulate buys/sells: Adjust asset quantities in the portfolio data structure and update the available cash. You will likely need to fetch asset prices using `openbb` for the relevant date to perform these calculations.
+            *   Simulate buys/sells: Adjust asset quantities in the portfolio data structure and update the available cash. To determine the transaction price, fetch the historical price data for the specific asset(s) on the transaction date(s) using `obb.equity.price.historical`.
+            *   Example fetching daily price data for AAPL on a specific date:
+                ```python
+                import openbb as obb
+                import logging
+                import pandas as pd
+                from datetime import date
+
+                transaction_date = date(2023, 5, 15) # Example date
+                symbol = "AAPL"
+                price_data = None
+
+                try:
+                    # Fetch data for a small range around the date to ensure availability
+                    start_fetch = transaction_date - pd.Timedelta(days=3)
+                    end_fetch = transaction_date
+                    logging.info(f"Fetching price for {symbol} around {transaction_date}")
+                    # Note: Using .to_dataframe() method to get pandas DataFrame
+                    historical_data = obb.equity.price.historical(
+                        symbol=symbol,
+                        start_date=start_fetch.strftime('%Y-%m-%d'),
+                        end_date=end_fetch.strftime('%Y-%m-%d'),
+                        interval="1d",
+                        provider="fmp" # Or another preferred provider
+                    )
+                    if historical_data and historical_data.results:
+                         df = historical_data.to_dataframe()
+                         if not df.empty:
+                             # Get the price for the specific date (usually the close price)
+                             # Ensure index is datetime
+                             df.index = pd.to_datetime(df.index)
+                             # Find the latest entry on or before the transaction date
+                             price_on_date = df.loc[df.index <= pd.Timestamp(transaction_date)].iloc[-1]
+                             price_data = price_on_date['close'] # Or 'open', 'high', 'low' as needed
+                             logging.info(f"Price for {symbol} on {transaction_date}: {price_data}")
+                         else:
+                             logging.warning(f"No data frame found for {symbol} around {transaction_date}")
+                    else:
+                        logging.warning(f"OpenBB query returned no results for {symbol} around {transaction_date}")
+                except Exception as e:
+                    logging.error(f"Error fetching price for {symbol} on {transaction_date}: {e}")
+
+                # Use price_data (if not None) for transaction simulation
+                ```
         *   **c. Calculation:**
-            *   Fetch end-of-month prices for all assets held in the portfolio using `openbb`.
+            *   Fetch end-of-month prices for all assets currently held in the portfolio using `obb.equity.price.historical`. This requires making a call for the relevant month's end date (or the last trading day of the month).
+            *   Example fetching end-of-month closing prices for multiple held assets:
+                ```python
+                import openbb as obb
+                import logging
+                import pandas as pd
+                from datetime import date
+
+                # Assume current_month_end is the last day of the month being processed
+                current_month_end = date(2023, 5, 31) # Example date
+                held_symbols = ["AAPL", "MSFT", "GOOG"] # Example list of symbols held
+                portfolio_value = 0.0
+                asset_prices = {}
+
+                if held_symbols:
+                    try:
+                        # Fetch data for the last few days of the month for all symbols
+                        start_fetch = current_month_end - pd.Timedelta(days=5)
+                        end_fetch = current_month_end
+                        logging.info(f"Fetching end-of-month prices for {held_symbols} around {current_month_end}")
+                        # Fetching for multiple symbols might return a dict or combined DataFrame
+                        # Using .to_dataframe() method to get pandas DataFrame
+                        historical_data = obb.equity.price.historical(
+                            symbol=",".join(held_symbols), # Some providers take comma-separated string
+                            # symbol=held_symbols, # Others might take a list
+                            start_date=start_fetch.strftime('%Y-%m-%d'),
+                            end_date=end_fetch.strftime('%Y-%m-%d'),
+                            interval="1d",
+                            provider="fmp" # Or another preferred provider
+                        )
+
+                        if historical_data and historical_data.results:
+                            df_all = historical_data.to_dataframe()
+                            if not df_all.empty:
+                                # Process the combined DataFrame to get latest close for each symbol
+                                df_all.index = pd.to_datetime(df_all.index)
+                                # Filter data up to the month end date
+                                df_filtered = df_all[df_all.index <= pd.Timestamp(current_month_end)]
+
+                                if 'symbol' in df_filtered.columns: # Check if symbol column exists for multi-symbol results
+                                     # Group by symbol and get the last entry for each
+                                     latest_prices = df_filtered.groupby('symbol').last()
+                                     asset_prices = latest_prices['close'].to_dict()
+                                elif len(held_symbols) == 1 and not df_filtered.empty: # Handle single symbol case
+                                     asset_prices[held_symbols[0]] = df_filtered.iloc[-1]['close']
+                                else:
+                                     logging.warning(f"Could not reliably extract prices for all symbols. Result format might differ. Check DataFrame: {df_filtered.head()}")
+                                     # Fallback: could attempt fetch individually if needed
+
+                                logging.info(f"End-of-month prices: {asset_prices}")
+                            else:
+                                 logging.warning(f"No data frame found for {held_symbols} around {current_month_end}")
+                        else:
+                            logging.warning(f"No price data returned for {held_symbols} around {current_month_end}")
+
+                    except Exception as e:
+                         logging.error(f"Error fetching end-of-month prices for {held_symbols}: {e}")
+
+                # Use asset_prices (containing {'AAPL': price, 'MSFT': price, ...}) to calculate portfolio value
+                # portfolio_value = sum(quantity * asset_prices.get(symbol, 0) for symbol, holding in portfolio.items()) + cash
+                ```
             *   Calculate the total market value of the portfolio (sum of `quantity * price` for all assets) plus any remaining cash.
             *   Keep track of the total invested capital (initial + cumulative monthly additions).
         *   **d. Storing:**
@@ -150,7 +340,7 @@ vibebacktest/
 *   `vibebacktest/utils.py`: Contains small, reusable helper functions used across different modules (e.g., date manipulation, financial calculations if needed).
 *   `requirements.txt`: File listing dependencies for `pip install -r requirements.txt`. Content would be like:
     ```
-    openbb-terminal
+    openbb
     PyYAML
     python-dateutil
     ```
