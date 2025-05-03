@@ -156,6 +156,137 @@ vibebacktest/
     ```
 *   `README.md`: This documentation file.
 
+## 5. Testing Strategy
+
+Ensuring the reliability and correctness of `VibeBackTest` requires a solid testing strategy. This section outlines the recommended approach.
+
+### 5.1. Testing Framework and Tools
+
+*   **Framework:** We recommend using **`pytest`** as the primary testing framework due to its flexibility, powerful features (like fixtures), and extensive plugin ecosystem.
+*   **Mocking:** For isolating tests from external dependencies (like `openbb`), use **`pytest-mock`** (a convenient wrapper around Python's built-in `unittest.mock`).
+*   **Coverage:** To measure how much of your code is executed by tests, use **`pytest-cov`**.
+
+### 5.2. Development Dependencies
+
+Testing tools are development dependencies and should be kept separate from the core application requirements. Create a `requirements-dev.txt` file in the project root:
+
+```
+# requirements-dev.txt
+pytest
+pytest-mock
+pytest-cov
+# Add other development/testing tools here (e.g., linters like flake8)
+```
+
+Install these dependencies using:
+```bash
+pip install -r requirements-dev.txt
+```
+
+### 5.3. Test Directory Structure
+
+Organize tests in a top-level `tests/` directory. The structure within `tests/` should ideally mirror the `vibebacktest/` source directory to make tests easy to find.
+
+```mermaid
+graph TD
+    ProjectRoot(vibebacktest/) --> Venv(venv/)
+    ProjectRoot --> Strategies(strategies/)
+    ProjectRoot --> SourceDir(vibebacktest/)
+    ProjectRoot --> TestsDir(tests/)
+    ProjectRoot --> Req(requirements.txt)
+    ProjectRoot --> ReqDev(requirements-dev.txt)
+    ProjectRoot --> Readme(documentation.md)
+
+    SourceDir --> Init(__init__.py)
+    SourceDir --> Main(main.py)
+    SourceDir --> Strategy(strategy.py)
+    SourceDir --> Backtester(backtester.py)
+    SourceDir --> Portfolio(portfolio.py)
+    SourceDir --> DataProvider(data_provider.py)
+    SourceDir --> Utils(utils.py)
+
+    TestsDir --> TestInit(test___init__.py)
+    TestsDir --> TestStrategy(test_strategy.py)
+    TestsDir --> TestPortfolio(test_portfolio.py)
+    TestsDir --> TestUtils(test_utils.py)
+    TestsDir --> TestDataProvider(test_data_provider.py)
+    TestsDir --> TestBacktester(test_backtester.py)
+    TestsDir --> ...(...)
+
+    Strategies --> ExampleStrategy(example_strategy.yaml)
+
+```
+
+### 5.4. Focus on Unit Tests
+
+The primary focus should be on **unit tests**. These tests verify individual components (functions, methods, classes) in isolation.
+
+*   **Benefits:** Easier to write and debug, faster execution, clearly identify the source of failures.
+
+### 5.5. Mocking External Dependencies (`openbb`)
+
+It is crucial to **mock** interactions with external services like the `openbb` library, especially within the `data_provider.py` module (if implemented) or wherever `openbb` functions are directly called.
+
+*   **Why Mock?**
+    *   **Isolation:** Tests shouldn't rely on external services being available or returning consistent data.
+    *   **Speed:** Network calls are slow; mocks are instantaneous.
+    *   **Predictability:** You control the exact data returned by the mock, making test outcomes deterministic.
+
+*   **Conceptual Example (`pytest-mock`):**
+
+    ```python
+    # Example in tests/test_data_provider.py (Conceptual)
+    from vibebacktest import data_provider # Assuming this exists
+
+    def test_get_price_mocking(mocker):
+        # Arrange: Mock the underlying openbb function called by data_provider.get_price
+        # The exact target string depends on how openbb is imported and used.
+        mock_openbb_price = mocker.patch('openbb_sdk.openbb.stocks.load', return_value=150.50) # Example target and return
+
+        # Act: Call your data provider function
+        price = data_provider.get_price('AAPL', '2023-10-26')
+
+        # Assert: Check the result and that the mock was used
+        assert price == 150.50
+        mock_openbb_price.assert_called_once_with(symbol='AAPL', start_date='2023-10-26', end_date='2023-10-26') # Verify call args
+    ```
+
+### 5.6. Test Structure (Arrange-Act-Assert)
+
+Structure your tests using the **Arrange-Act-Assert (AAA)** pattern:
+
+1.  **Arrange:** Set up the test prerequisites (create objects, prepare mock data, configure mocks).
+2.  **Act:** Execute the code being tested.
+3.  **Assert:** Verify that the outcome of the action matches the expected result.
+
+### 5.7. Running Tests
+
+Execute tests from the project root directory:
+
+*   **Run all tests:**
+    ```bash
+    pytest
+    ```
+*   **Run tests with coverage report:**
+    ```bash
+    pytest --cov=vibebacktest tests/
+    ```
+    This command tells `pytest-cov` to measure coverage for the `vibebacktest` package while running tests found in the `tests/` directory. A report will be printed to the console.
+
+### 5.8. Test Coverage
+
+Aim for good test coverage, ensuring that critical logic, validation rules, and calculations are tested. While striving for high coverage is beneficial, focus on testing important functionalities and edge cases first. Use the coverage reports generated by `pytest-cov` to identify untested areas of the code. All new code changes and features should be accompanied by corresponding tests.
+
+### 5.9. What to Test (Examples)
+
+*   **`strategy.py`:** Loading valid/invalid YAML, date parsing, date logic validation.
+*   **`portfolio.py`:** Correct calculation of portfolio value, cash updates after transactions, adding/removing assets.
+*   **`backtester.py`:** Core loop logic (using mocked data), handling of screener results, rebalancing logic, transaction execution logic.
+*   **`data_provider.py`:** Correct interaction with mocked `openbb` functions, handling of simulated API responses.
+*   **`utils.py`:** Any helper functions for calculations or data manipulation.
+*   **`main.py`:** Command-line argument parsing logic.
+
+---
 ---
 
 ## Strategy YAML File Design and Example
