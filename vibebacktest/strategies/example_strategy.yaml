@@ -1,0 +1,40 @@
+# --- VibeBackTest Strategy Configuration ---
+
+# Initial amount of cash to start the backtest with.
+initial_capital: 10000.00
+
+# Amount of new cash added to the portfolio at the beginning of each month.
+# Set to 0 if no new money is added regularly.
+monthly_addition: 500.00
+
+# --- Rebalancing Rules ---
+rebalancing:
+  # How often to run the screener and rebalance the portfolio.
+  # For now, only "monthly" is supported due to the core loop structure.
+  frequency: monthly
+  # Maximum number of assets to hold in the portfolio at any time.
+  max_assets: 10
+
+# --- Screener Criteria ---
+screener:
+  # List of criteria for selecting assets.
+  criteria:
+    - metric: MarketCap
+      min: 2000000000
+      max: 200000000000
+    - metric: P/E
+      max: 25
+    - metric: AverageVolume
+      min: 1000000
+  # Ranking criteria for selected assets.
+  ranking:
+    metric: MarketCap
+    order: descending
+# --- Asset Selection ---
+asset_selection:
+  method: top_n
+  n: 5
+
+# --- Allocation Rules ---
+allocation_rules:
+  method: equal_weight
