@@ -1,4 +1,5 @@
 import yaml
+import logging
 
 def load_strategy(file_path: str) -> dict:
     """
@@ -30,7 +31,6 @@ def load_strategy(file_path: str) -> dict:
 
     missing_fields = required_fields - config.keys()
     if missing_fields:
-        import logging
     
         # Debugging: Log the parsed YAML content and missing fields
         logging.debug(f"Parsed YAML content: {strategy_config}")

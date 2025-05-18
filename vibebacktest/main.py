@@ -2,11 +2,11 @@ import argparse
 import re
 import sys
 import logging
+
 logging.basicConfig(level=logging.DEBUG)
 
 def validate_date_format(date_str):
     """Validate date format as YYYY-MM."""
-    import logging
     logging.basicConfig(level=logging.DEBUG)
     logging.debug("Validating date format for input: %s", date_str)
     if not re.match(r"^\d{4}-\d{2}$", date_str):
@@ -22,12 +22,11 @@ def parse_arguments():
     
     return parser.parse_args()
 
-import logging
+
 from strategy import load_strategy
 from backtester import run_backtest
 from portfolio import Portfolio
 from data_provider import DataProvider
-
 def main():
     """Main entry point for the CLI."""
     logging.basicConfig(level=logging.INFO)
@@ -40,7 +39,6 @@ def main():
         logging.info("Loaded strategy: %s", strategy)
 
         # Initialize DataProvider and Portfolio
-        data_provider = DataProvider()
         portfolio = Portfolio()
 
         # Run backtest
