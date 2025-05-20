@@ -1,23 +1,20 @@
-# Progress
+## Completed Tasks (Updated)
 
-This file tracks the project's progress using a task list format.
-
----
-
-## Completed Tasks
-
-- Initialized the Memory Bank for the **VibeBackTest** project.
-- Created `productContext.md` with an overview of the project goals, features, and architecture.
-- Created `activeContext.md` to track the project's current status.
+- Implemented the initial version of the VibeBackTest application:
+  - `README.md`: Documented project overview and usage.
+  - `requirements.txt`: Listed project dependencies.
+  - `main.py`: CLI entry point for the application.
+  - `strategy.py`: Handles strategy YAML loading and validation.
+  - `backtester.py`: Implements the backtesting loop.
+  - `portfolio.py`: Manages portfolio state, transactions, and value calculations.
 
 ## Current Tasks
 
-- Document the development plan in the Memory Bank.
+- Implement screener logic and integrate with the `openbb` library.
+- Add transaction simulation and portfolio rebalancing logic.
+- Develop unit tests for all modules using `pytest`.
 
 ## Next Steps
 
-- Begin implementing the development plan for the **VibeBackTest** application.
-
----
-
-*Log of updates will be appended as footnotes to the end of this file.*
+- Focus on the screener and transaction logic.
+- Begin writing unit tests for the implemented modules.
