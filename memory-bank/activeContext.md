@@ -12,3 +12,4 @@
 ## Open Questions/Issues
 
 - None at the moment.
+[2025-05-20 20:22:50] - Updated the project with an example YAML file for strategy configuration (`strategy_example.yaml`), implemented loading and validation logic in `strategy.py`, and tested the functionality in `backtester.py`. The test confirmed successful loading and validation of the strategy.

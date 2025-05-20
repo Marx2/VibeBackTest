@@ -45,3 +45,18 @@ def run_backtest(strategy, start_date, end_date):
         current_date += relativedelta(months=1)
 
     print("Backtest complete.")
+from strategy import load_strategy
+
+def test_strategy_loading():
+    """
+    Test the loading and validation of a strategy YAML file.
+    """
+    try:
+        strategy = load_strategy("vibebacktest/strategy_example.yaml")
+        print("Strategy loaded successfully:")
+        print(strategy)
+    except Exception as e:
+        print(f"Error loading strategy: {e}")
+
+if __name__ == "__main__":
+    test_strategy_loading()

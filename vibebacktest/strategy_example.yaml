@@ -1,0 +1,14 @@
+# Example Strategy Configuration
+strategy:
+  name: "Mean Reversion Strategy"
+  description: "A strategy that buys oversold assets and sells overbought assets."
+  parameters:
+    lookback_period: 14
+    oversold_threshold: 30
+    overbought_threshold: 70
+    position_size: 0.1
+  rules:
+    - condition: "RSI < oversold_threshold"
+      action: "Buy"
+    - condition: "RSI > overbought_threshold"
+      action: "Sell"
